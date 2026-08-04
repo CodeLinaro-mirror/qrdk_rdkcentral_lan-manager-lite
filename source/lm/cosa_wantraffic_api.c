@@ -69,6 +69,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <errno.h>
 #include <unistd.h>
 #include <stdbool.h>
 #include <pthread.h>
@@ -842,10 +843,12 @@ static VOID WTC_DeInit
     )
 {
     //Intimate Hal to stop monitoring
-    if ( RETURN_OK != platform_hal_setDscp(index + 1, TRAFFIC_CNT_STOP,
-                              WanTrafficCountInfo_t[index]->EnabledDSCPList) )
+    INT stopRet = platform_hal_setDscp(index + 1, TRAFFIC_CNT_STOP,
+                              WanTrafficCountInfo_t[index]->EnabledDSCPList);
+    if ( RETURN_OK != stopRet )
     {
-        WTC_LOG_ERROR("Platform Stop call failed!");
+        WTC_LOG_ERROR("Platform Stop call failed! ret=%d errno=%d (%s)",
+                      stopRet, errno, strerror(errno));
     }
 
     if ( RETURN_OK != platform_hal_resetDscpCounts(index + 1) )
