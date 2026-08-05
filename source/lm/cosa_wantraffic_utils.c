@@ -767,6 +767,7 @@ static pstDSCPInfo_t DeleteDisabledClients(pstDSCPInfo_t DscpTree)
 **********************************************************************/
 pstDSCPInfo_t InsertClient(pstDSCPInfo_t DscpTree, pDSCP_list_t CliList)
 {
+    WTC_LOG_INFO("InsertClient Enter: DscpTree=%p, CliList=%p", DscpTree, CliList);
     if ( (DscpTree != NULL) && (CliList != NULL) )
     {
             if(DscpTree->Dscp == CliList->DSCP_Element[DscpTree->Dscp].dscp_value)
@@ -789,12 +790,13 @@ pstDSCPInfo_t InsertClient(pstDSCPInfo_t DscpTree, pDSCP_list_t CliList)
                         }
 
                         // Below logic takes care of alloc, realloc and freeing of client list.
-                        if ( !(DscpTree->ClientList = (stClientInfo_t*)realloc(DscpTree->ClientList,
-                                                DscpTree->MemorySlab * sizeof(stClientInfo_t)))
-                             && DscpTree->MemorySlab )
+                            if ( !(DscpTree->ClientList = (stClientInfo_t*)realloc(DscpTree->ClientList,
+                                        DscpTree->MemorySlab * sizeof(stClientInfo_t)))
+                                 && DscpTree->MemorySlab )
                         {
-                            WTC_LOG_ERROR("Realloc failure.");
-                            return DscpTree;
+                                WTC_LOG_ERROR("Realloc failure.");
+                                WTC_LOG_INFO("InsertClient Exit (realloc failure): DscpTree=%p", DscpTree);
+                                return DscpTree;
                         }
 
                         WTC_LOG_INFO("[DSCP-%d] Memory Slab : %d", DscpTree->Dscp
@@ -814,14 +816,21 @@ pstDSCPInfo_t InsertClient(pstDSCPInfo_t DscpTree, pDSCP_list_t CliList)
                              continue;
                          }
                     }
-                    if (DscpTree->ClientList == NULL)
-                    {
-                      WTC_LOG_INFO("ClientList is NULL");
-                      return DscpTree;
-                    }
+                                        if (DscpTree->ClientList == NULL)
+                                        {
+                                            WTC_LOG_INFO("ClientList is NULL");
+                                            WTC_LOG_INFO("InsertClient Exit (ClientList NULL): DscpTree=%p", DscpTree);
+                                            return DscpTree;
+                                        }
                     /* Number of clients associated with the DSCP value in DSCP_Element. Maximum value for numClients is 255 range [ 0-255] */
                     for(UINT i=0; (i<255 && i<cliIndex); i++) // CID 560298 Overflowed array index read
                     {
+                        /* Log each incoming client being processed (best-effort) */
+                        WTC_LOG_DEBUG("Processing incoming client idx=%u for DSCP=%d: mac=%s, rx=%lu, tx=%lu",
+                                      i, DscpTree->Dscp,
+                                      CliList->DSCP_Element[DscpTree->Dscp].Client[i].mac,
+                                      CliList->DSCP_Element[DscpTree->Dscp].Client[i].rxBytes,
+                                      CliList->DSCP_Element[DscpTree->Dscp].Client[i].txBytes);
                         UINT j;
                         for(j=0; j<dscpIndex; j++)
                         {
@@ -904,16 +913,16 @@ pstDSCPInfo_t InsertClient(pstDSCPInfo_t DscpTree, pDSCP_list_t CliList)
                                 DscpTree->ClientList[j].IsUpdated = TRUE;
                                 DscpTree->NumClients++;
                                 DscpTree->IsUpdated = TRUE;
-                                WTC_LOG_INFO("j = %d, Dscp = %d, MAC = %s, RxBytes = %lu,"
-                                             "TxBytes = %lu, RxBytesTot = %lu, TxBytesTot = %lu,"
-                                             "Is_Updated = %d",
-                                              j, DscpTree->Dscp,
-                                              DscpTree->ClientList[j].Mac,
-                                              DscpTree->ClientList[j].RxBytes,
-                                              DscpTree->ClientList[j].TxBytes,
-                                              DscpTree->ClientList[j].RxBytesTot,
-                                              DscpTree->ClientList[j].TxBytesTot,
-                                              DscpTree->IsUpdated);
+                                                                WTC_LOG_INFO("j = %d, Dscp = %d, MAC = %s, RxBytes = %lu,"
+                                                                                         "TxBytes = %lu, RxBytesTot = %lu, TxBytesTot = %lu,"
+                                                                                         "Is_Updated = %d",
+                                                                                            j, DscpTree->Dscp,
+                                                                                            DscpTree->ClientList[j].Mac,
+                                                                                            DscpTree->ClientList[j].RxBytes,
+                                                                                            DscpTree->ClientList[j].TxBytes,
+                                                                                            DscpTree->ClientList[j].RxBytesTot,
+                                                                                            DscpTree->ClientList[j].TxBytesTot,
+                                                                                            DscpTree->IsUpdated);
                             }
                         }
                     }
@@ -931,5 +940,6 @@ pstDSCPInfo_t InsertClient(pstDSCPInfo_t DscpTree, pDSCP_list_t CliList)
     {
         WTC_LOG_INFO("CliList is NULL");
     }
+    WTC_LOG_INFO("InsertClient Exit: DscpTree=%p", DscpTree);
     return DscpTree;
 }

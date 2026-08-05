@@ -70,6 +70,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <errno.h>
+#include <time.h>
 #include <unistd.h>
 #include <stdbool.h>
 #include <pthread.h>
@@ -1265,6 +1266,8 @@ static VOID* WTC_Thread()
     errno_t rc = -1;
     /* CID: 280269  Out-of-bounds access (OVERRUN) */
     UINT index = 0;
+    /* iteration counter for RUN loop to help correlate timestamps */
+    unsigned long run_iter = 0;
     /* CID 280141 Branch past initialization */
     BOOL doDismiss = FALSE;
     BOOL isDscpUpdated = FALSE;
@@ -1454,18 +1457,39 @@ static VOID* WTC_Thread()
                 sleep(DEFAULT_THREAD_SLEEP);
                 continue;
         }
-        if ( RETURN_OK != platform_hal_getDscpClientList(WTCinfo->WanMode, &CliList) )
+        /* Log and call HAL to fetch client list */
+        WTC_LOG_INFO("WTC RUN loop iter=%lu time=%ld - calling platform_hal_getDscpClientList for wanMode=%d",
+                     run_iter, (long)time(NULL), WTCinfo->WanMode);
+        int getRet = platform_hal_getDscpClientList(WTCinfo->WanMode, &CliList);
+        WTC_LOG_INFO("platform_hal_getDscpClientList returned %d", getRet);
+        if ( RETURN_OK != getRet )
         {
-            WTC_LOG_ERROR("Platform get failed. Sleep and try on the next cycle");
+            WTC_LOG_ERROR("Platform get failed. Sleep and try on the next cycle. ret=%d", getRet);
             sleep(WanTrafficCountInfo_t[index]->SleepInterval);
+            run_iter++;
             continue;
+        }
+
+        /* Log whether CliList contains expected per-DSCP elements (best-effort) */
+        if (WanTrafficCountInfo_t[index] && WanTrafficCountInfo_t[index]->DscpTree)
+        {
+            UINT sampleDscp = WanTrafficCountInfo_t[index]->DscpTree->Dscp;
+            WTC_LOG_INFO("CliList sample for DSCP %u: numClients=%u",
+                         sampleDscp,
+                         (unsigned int)CliList.DSCP_Element[sampleDscp].numClients);
+        }
+        else
+        {
+            WTC_LOG_INFO("CliList received; no DscpTree available to sample");
         }
 
         pthread_mutex_lock(&WTCinfo->WanTrafficMutexVar);
 
            ResetIsUpdatedFlag(WanTrafficCountInfo_t[index]->DscpTree);
+           WTC_LOG_INFO("Before InsertClient: DscpTree=%p", WanTrafficCountInfo_t[index]->DscpTree);
            WanTrafficCountInfo_t[index]->DscpTree =
                              InsertClient(WanTrafficCountInfo_t[index]->DscpTree, &CliList);
+           WTC_LOG_INFO("After InsertClient: DscpTree=%p", WanTrafficCountInfo_t[index]->DscpTree);
         pthread_mutex_unlock(&WTCinfo->WanTrafficMutexVar);
 
         if(!WanTrafficCountInfo_t[index]->DscpTree)
@@ -1475,8 +1499,11 @@ static VOID* WTC_Thread()
             continue;
         }
 
+        WTC_LOG_INFO("Before WTC_SendTrafficCountRbus for index=%u", index);
         WTC_SendTrafficCountRbus(index);
+        WTC_LOG_INFO("After WTC_SendTrafficCountRbus for index=%u", index);
         sleep(WanTrafficCountInfo_t[index]->SleepInterval);
+        run_iter++;
         continue;
         }
         else
