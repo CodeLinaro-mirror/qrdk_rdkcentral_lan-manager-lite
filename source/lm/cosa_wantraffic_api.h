@@ -108,13 +108,8 @@
 #define TR181_SLEEPINTERVAL         "Device.X_RDK_WAN.Interface.1.Stats.DscpCountInterval"
 #define TR181_COUNTPERINTERVAL      "Device.X_RDK_WAN.Interface.1.Stats.DscpCountPerInterval"
 #define TR181_COUNTTOTAL            "Device.X_RDK_WAN.Interface.1.Stats.DscpCountTotal"
-#ifdef _SR300_PRODUCT_REQ_
 #define TR181_ACTIVE_INTERFACE      "Device.X_RDK_WanManager.InterfaceActiveStatus"
 #define DSL                         DOCSIS
-#endif
-#ifdef _RDKB_GLOBAL_PRODUCT_REQ_
-#define TR181_ACTIVE_INTERFACE      "Device.X_RDK_WanManager.InterfaceActiveStatus"
-#endif
 
 
 #define LMLITE_RBUS_COMPONENT_NAME  "CcspLMLite"

@@ -92,6 +92,7 @@
 /*  FUNCTION PROTOTYPES  */
 INT            IsBridgeMode(VOID);
 WAN_INTERFACE  GetEthWANIndex(VOID);
+UINT           GetWtcIndex(WAN_INTERFACE mode);
 CHAR*          RemoveSpaces(CHAR *str);
 BOOL           CheckForAllDscpValuePresence(CHAR *str);
 
