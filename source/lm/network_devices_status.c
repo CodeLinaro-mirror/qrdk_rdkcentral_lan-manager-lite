@@ -78,33 +78,6 @@ static struct networkdevicestatusdata *headnodeextender = NULL;
 
 extern pthread_mutex_t LmHostObjectMutex;
 
-static BOOL NDS_GetSyscfgBool(const char *key, BOOL defaultValue)
-{
-    char value[16] = {0};
-
-    if (key == NULL)
-    {
-        return defaultValue;
-    }
-
-    if (syscfg_get(NULL, key, value, sizeof(value)) != 0)
-    {
-        return defaultValue;
-    }
-
-    if ((strcasecmp(value, "true") == 0) || (strcmp(value, "1") == 0))
-    {
-        return TRUE;
-    }
-
-    if ((strcasecmp(value, "false") == 0) || (strcmp(value, "0") == 0))
-    {
-        return FALSE;
-    }
-
-    return defaultValue;
-}
-
 static BOOL NDS_IsDhcpAddressSource(PLmObjectHost host)
 {
     if ((host == NULL) || (host->pStringParaValue[LM_HOST_AddressSource] == NULL))
@@ -557,7 +530,7 @@ char* NDS_GetIpAddress(PLmObjectHost host)
     char *pIpv4address = NULL;
     char *pIpv6addressindex1 = NULL;
     char *pIpv6addressindex3 = NULL;
-    BOOL dhcpv4Enabled = NDS_GetSyscfgBool("dhcp_server_enabled", TRUE);
+    char dhcpServerEnabled[16] = {0};
     BOOL dhcpSource = FALSE;
     time_t now = 0;
 
@@ -573,7 +546,8 @@ char* NDS_GetIpAddress(PLmObjectHost host)
         pIpv4address = host->pStringParaValue[LM_HOST_IPAddressId];
     }
 
-    if ((!dhcpv4Enabled) && dhcpSource &&
+    if ((syscfg_get(NULL, "dhcp_server_enabled", dhcpServerEnabled, sizeof(dhcpServerEnabled)) == 0) &&
+        (strcmp(dhcpServerEnabled, "0") == 0) && dhcpSource &&
         (host->LeaseTime != 0xFFFFFFFF) && (now >= (time_t)host->LeaseTime))
     {
         pIpv4address = NULL;
