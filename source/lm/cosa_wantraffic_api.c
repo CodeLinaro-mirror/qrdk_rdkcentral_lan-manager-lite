@@ -161,7 +161,11 @@ VOID WTC_Init
             //Init Global Struct
             WTCinfo->SubscribeRefCount = 0;
             WTCinfo->LanMode = IsBridgeMode();
-            WTCinfo->WanMode = GetEthWANIndex();
+            if (!GetWanModeAndWtcIndex(&WTCinfo->WanMode,
+                                       &WTCinfo->WanModeWtcIndex))
+            {
+                WTCinfo->WanMode = INVALID_MODE;
+            }
             #if defined(_SR300_PRODUCT_REQ_) || defined(_RDKB_GLOBAL_PRODUCT_REQ_)
             if ((INVALID_MODE == WTCinfo->LanMode))
             #else
@@ -239,7 +243,7 @@ VOID WTC_Init
                 }
             }
 
-            if ( (!WTCinfo->LanMode) && (i == GetWtcIndex(WTCinfo->WanMode)) )
+            if ( (!WTCinfo->LanMode) && (i == WTCinfo->WanModeWtcIndex) )
             {
                 WTC_ApplyStateChange();
             }
@@ -291,7 +295,7 @@ static VOID WTC_EventHandler
     }
     else
     {
-        UINT index = GetWtcIndex(WTCinfo->WanMode);
+        UINT index = WTCinfo->WanModeWtcIndex;
         rc = strcmp_s(eventName, strlen(eventName), TR181_LANMODE, &ind);
         ERR_CHK(rc);
         if ((rc == EOK) && (!ind))
@@ -335,7 +339,7 @@ VOID WTC_ApplyStateChange
         VOID
     )
 {
-    UINT index = GetWtcIndex(WTCinfo->WanMode);
+    UINT index = WTCinfo->WanModeWtcIndex;
     UINT i;
     WAN_INTERFACE mode;
     eWTCThreadStatus_t thrdStatus = WTC_THRD_IDLE;
@@ -354,9 +358,13 @@ VOID WTC_ApplyStateChange
                              , wanMode[index]
                              , WTC_ThreadStatusToStr(thrdStatus));
                 WTCinfo->WTCConfigFlag[index] &= ~WTC_WANMODE_CHANGE;
-                WTCinfo->WanMode = GetEthWANIndex();
-                CHK_WAN_MODE(WTCinfo->WanMode);
-                index = GetWtcIndex(WTCinfo->WanMode);
+                if (!GetWanModeAndWtcIndex(&WTCinfo->WanMode,
+                                           &WTCinfo->WanModeWtcIndex))
+                {
+                    WTC_LOG_ERROR("INVALID WAN MODE");
+                    return;
+                }
+                index = WTCinfo->WanModeWtcIndex;
             }
             else if(WTCinfo->WTCConfigFlag[index] & WTC_LANMODE_CHANGE)
             {
@@ -405,14 +413,12 @@ VOID WTC_ApplyStateChange
         case WTC_THRD_RUNNING:
          {
             WTC_LOG_INFO("Thread in RUNNING state");
-            mode = GetEthWANIndex();
-            if (mode == INVALID_MODE)
+            if (!GetWanModeAndWtcIndex(&mode, &i))
             {
                 WTC_LOG_ERROR("INVALID WAN MODE");
                 WTC_SetThreadState(index,WTC_THRD_DISMISS);
                 return;
             }
-            i = GetWtcIndex(mode);
 
             if (WTCinfo->WTCConfigFlag[index] & WTC_WANMODE_CHANGE)
             {
@@ -439,8 +445,8 @@ VOID WTC_ApplyStateChange
                                  , wanMode[index]
                                  , WTC_ThreadStatusToStr(thrdStatus));
                     WTC_SetThreadState(index,WTC_THRD_DISMISS);
-                    WTCinfo->WanMode = GetEthWANIndex();
-                    CHK_WAN_MODE(WTCinfo->WanMode);
+                    WTCinfo->WanMode = mode;
+                    WTCinfo->WanModeWtcIndex = i;
                 }
                 WTCinfo->WTCConfigFlag[index] &= ~WTC_WANMODE_CHANGE;
             }
@@ -1231,7 +1237,7 @@ static VOID WTC_CreateThread
     UINT index = 0;
     if(WTCinfo->WanMode)
     {
-        index = GetWtcIndex(WTCinfo->WanMode);
+        index = WTCinfo->WanModeWtcIndex;
     }
     if(!WTCinfo->WanTrafficThreadId)
     {
@@ -1272,7 +1278,7 @@ static VOID* WTC_Thread()
 
     if(WTCinfo->WanMode)
     {
-        index = GetWtcIndex(WTCinfo->WanMode);
+        index = WTCinfo->WanModeWtcIndex;
     }
 
     WTC_LOG_INFO("Successfully created Thread");
@@ -1432,18 +1438,18 @@ static VOID* WTC_Thread()
             case WTC_THRD_SUSPEND:
                 WTC_DeInit(index, FALSE);
                 WTC_SetThreadStatus(index, WTC_THRD_SUSPENDED);
-                WTCinfo->WanMode = GetEthWANIndex();
-              /*  CID: 280133 Out-of-bounds read (OVERRUN) */
-                                if(WTCinfo->WanMode != INVALID_MODE)
+                if (GetWanModeAndWtcIndex(&WTCinfo->WanMode,
+                                          &WTCinfo->WanModeWtcIndex))
                 {
-                    index = GetWtcIndex(WTCinfo->WanMode);
+                    index = WTCinfo->WanModeWtcIndex;
                 }
                 sleep(DEFAULT_THREAD_SLEEP);
                 continue;
             case WTC_THRD_DISMISS:
                 WTC_DeInit(index, TRUE);
                 WTC_SetThreadStatus(index, WTC_THRD_DISMISSED);
-                WTCinfo->WanMode = GetEthWANIndex();
+                GetWanModeAndWtcIndex(&WTCinfo->WanMode,
+                                      &WTCinfo->WanModeWtcIndex);
 
                 goto wtc_exit;
             default:

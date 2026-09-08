@@ -120,199 +120,202 @@ CHAR* RemoveSpaces(CHAR *str)
 }
 /**********************************************************************
     function:
-        GetCurrentActiveInterface
+        GetWanModeAndWtcIndex
     description:
-        This function is called to get active interface from rbus
-    output argument:
-        CHAR*    str,    interface name which is active
-    return:
-        INT    status
-**********************************************************************/
-INT GetCurrentActiveInterface(CHAR *ifname)
-{
-    rbusValue_t value;
-    int rc = RBUS_ERROR_SUCCESS;
-    char* val = NULL, *token = NULL, c;
-
-    rc = rbus_get(rbus_handle, TR181_ACTIVE_INTERFACE, &value);
-
-    if(rc == RBUS_ERROR_SUCCESS)
-    {
-        val = rbusValue_ToString(value,0,0);
-        if(val)
-        {
-            if(strlen(val) > 0)
-            {
-                WTC_LOG_INFO("WAN Interfaces status = %s",val);
-            }
-            else
-            {
-                WTC_LOG_INFO("rbus val is empty for active interface");
-                rbusValue_Release(value);
-                return 0;
-            }
-        }
-        else
-        {
-            WTC_LOG_INFO("rbus val NULL for active interface");
-            rbusValue_Release(value);
-            return 0;
-        }
-    }
-    else
-    {
-        WTC_LOG_INFO("rbus get failed for %s", TR181_ACTIVE_INTERFACE);
-        return 0;
-    }
-
-   //DSL,1|WANOE,0|ADSL,0
-    token = strtok(val, "|"); 
-    while (token != NULL) 
-    {
-        c = token[strlen(token)-1]; // last char in token
-        if(c == '1') 
-        {
-            if((strlen(token)-2) < BUFLEN_64) 
-            {
-                strncpy(ifname, token, strlen(token)-2);
-                ifname[strlen(token)-2] = '\0';
-                WTC_LOG_INFO("Current active interface = %s",ifname);
-                rbusValue_Release(value);
-                return 1;
-            }
-            else
-            {
-                WTC_LOG_INFO("Active interface is invalid");
-                rbusValue_Release(value);
-                return 0;
-            }
-        }
-        token = strtok(NULL, "|");
-    }
-    
-    WTC_LOG_INFO("Getting current active interface failed");
-    rbusValue_Release(value);
-
-    return 0;
-
-}
-/**********************************************************************
-    function:
-        GetEthWANIndex
-    description:
-        This function is called to retrieve the Wan mode
+        This function retrieves active WAN mode and corresponding WTC index.
     argument:
-        None
-    return:     WAN_INTERFACE if succeeded;
-                0 if error.
+        WAN_INTERFACE*  wanMode
+        UINT*           wtcIndex
+    return:     TRUE if succeeded; FALSE otherwise.
 **********************************************************************/
-
-WAN_INTERFACE GetEthWANIndex(VOID)
+BOOL GetWanModeAndWtcIndex(WAN_INTERFACE *wanMode, UINT *wtcIndex)
 {
+    rbusValue_t value = NULL;
+    const CHAR *status = NULL;
+    CHAR activeStatus[BUFLEN_256] = { '\0' };
+    CHAR availableStatus[BUFLEN_256] = { '\0' };
+    CHAR *entry = NULL;
+    CHAR *entryContext = NULL;
+    CHAR *name = NULL;
+    CHAR *nameContext = NULL;
+    CHAR *activeFlag = NULL;
+    WAN_INTERFACE activeMode = INVALID_MODE;
     errno_t rc = -1;
     INT ind = -1;
-    CHAR active_interface_name[BUFLEN_64] = {'\0'};
+    CHAR eth_wan_enabled[BUFLEN_64] = {'\0'};
 
-    if(GetCurrentActiveInterface(active_interface_name) == 1)
+    if ((wanMode == NULL) || (wtcIndex == NULL))
     {
-        rc = strcmp_s(active_interface_name, strlen(active_interface_name), "WANOE", &ind);
-        ERR_CHK(rc);
-        if ((rc == EOK) && (!ind))
-        {
-            WTC_LOG_INFO("EWAN Mode");
-            return EWAN;
-        }
-
-        rc = strcmp_s(active_interface_name, strlen(active_interface_name), "EPON", &ind);
-        ERR_CHK(rc);
-        if ((rc == EOK) && (!ind))
-        {
-            WTC_LOG_INFO("EPON Mode");
-            return EPON;
-        }
-
-        rc = strcmp_s(active_interface_name, strlen(active_interface_name), "XGSPON", &ind);
-        ERR_CHK(rc);
-        if ((rc == EOK) && (!ind))
-        {
-            WTC_LOG_INFO("XGSPON Mode");
-            return XGSPON;
-        }
-
-        rc = strcmp_s(active_interface_name, strlen(active_interface_name), "DOCSIS", &ind);
-        ERR_CHK(rc);
-        if ((rc == EOK) && (!ind))
-        {
-            WTC_LOG_INFO("DOCSIS Mode");
-            return DOCSIS;
-        }
-
-        rc = strcmp_s(active_interface_name, strlen(active_interface_name), "DSL", &ind);
-        ERR_CHK(rc);
-        if ((rc == EOK) && (!ind))
-        {
-            WTC_LOG_INFO("DSL Mode");
-            return DSL;
-        }
-
-        rc = strcmp_s(active_interface_name, strlen(active_interface_name), "ADSL", &ind);
-        ERR_CHK(rc);
-        if ((rc == EOK) && (!ind))
-        {
-            WTC_LOG_INFO("ADSL Mode");
-            return DSL;
-        }
-
-        WTC_LOG_ERROR("Unsupported active WAN interface %s", active_interface_name);
-        return INVALID_MODE;
+        return FALSE;
     }
 
-    WTC_LOG_INFO("WanManager active interface unavailable; using syscfg fallback");
+    if ((rbus_get(rbus_handle, TR181_ACTIVE_INTERFACE, &value) == RBUS_ERROR_SUCCESS) &&
+        ((status = rbusValue_ToString(value, NULL, NULL)) != NULL) &&
+        (strcpy_s(activeStatus, sizeof(activeStatus), status) == EOK))
     {
-    CHAR eth_wan_enabled[BUFLEN_64] = {'\0'};
-    if(syscfg_get(NULL,ETH_WAN_ENABLE_STRING,eth_wan_enabled,sizeof(eth_wan_enabled)) == 0 )
-    {
-        rc = strcmp_s(eth_wan_enabled, strlen(eth_wan_enabled), "true", &ind);
-        ERR_CHK(rc);
-        if ((rc == EOK) && (!ind))
-        {
-            WTC_LOG_INFO("EWAN Mode");
-            return EWAN;
-        }
-        else
-        {
-            WTC_LOG_INFO("DOCSIS Mode");
-            return DOCSIS;
-        }
+        rbusValue_Release(value);
+        value = NULL;
     }
     else
     {
-        WTC_LOG_ERROR("Syscfg_get failed to get wan mode");
-        return INVALID_MODE;
+        WTC_LOG_ERROR("Failed to get %s; using syscfg fallback", TR181_ACTIVE_INTERFACE);
+        if (value != NULL)
+        {
+            rbusValue_Release(value);
+        }
+        goto syscfg_fallback;
     }
-    }
-}
 
-/**********************************************************************
-    function:
-        GetWtcIndex
-    description:
-        This function converts a WAN_INTERFACE HAL enum value into the
-        WTC array/row index. Kept separate from the enum itself since
-        the two numberings are not guaranteed to match.
-    argument:
-        WAN_INTERFACE   mode    -   WAN interface HAL enum value
-    return:
-        UINT    array index into WanTrafficCountInfo_t[] / WTCConfigFlag[]
-**********************************************************************/
-UINT GetWtcIndex(WAN_INTERFACE mode)
-{
+        WTC_LOG_ERROR("Failed to get %s; using syscfg fallback", TR181_AVAILABLE_INTERFACE);
+        ((status = rbusValue_ToString(value, NULL, NULL)) == NULL) ||
+        (strcpy_s(availableStatus, sizeof(availableStatus), status) != EOK))
+    {
+        WTC_LOG_INFO("WanManager interface status unavailable; using syscfg fallback");
+        if (value != NULL)
+        {
+            rbusValue_Release(value);
+        }
+        goto syscfg_fallback;
+    }
+    rbusValue_Release(value);
+    value = NULL;
+
+    entry = strtok_r(activeStatus, "|", &entryContext);
+    while (entry != NULL)
+    {
+        name = strtok_r(entry, ",", &nameContext);
+        activeFlag = strtok_r(NULL, ",", &nameContext);
+        if ((name != NULL) && (activeFlag != NULL) && (strcmp(activeFlag, "1") == 0))
+        {
+            if ((strcmp(name, "DOCSIS") == 0) || (strcmp(name, "DSL") == 0) ||
+                (strcmp(name, "ADSL") == 0))
+            {
+                activeMode = DOCSIS;
+            }
+            else if (strcmp(name, "WANOE") == 0)
+            {
+                activeMode = EWAN;
+            }
+            else if (strcmp(name, "EPON") == 0)
+            {
+                activeMode = EPON;
+            }
+            else if (strcmp(name, "XGSPON") == 0)
+            {
+                activeMode = XGSPON;
+            }
+            if (activeMode != INVALID_MODE)
+            {
+                break;
+            }
+        }
+        entry = strtok_r(NULL, "|", &entryContext);
+    }
+
+    if (activeMode == INVALID_MODE)
+    {
+        WTC_LOG_ERROR("No supported active WAN interface in %s", activeStatus);
+        return FALSE;
+    }
+
 #if SUPPORTED_WAN_MODES == 1
-    (VOID)mode;
-    return 0;
+    *wanMode = activeMode;
+    *wtcIndex = 0;
+    WTC_LOG_INFO("WanManager resolved WAN mode %d, WTC index %d", *wanMode, *wtcIndex);
+    return TRUE;
 #else
-    return (mode == DOCSIS) ? 0 : 1;
+    {
+    CHAR availableStatusCopy[BUFLEN_256] = { '\0' };
+    WAN_INTERFACE modeOrder[] = { DOCSIS, EWAN, EPON, XGSPON };
+    WAN_INTERFACE availableMode = INVALID_MODE;
+    UINT modeIndex = 0;
+    UINT index = 0;
+    BOOL modePresent = FALSE;
+
+    *wanMode = activeMode;
+    for (modeIndex = 0; modeIndex < (sizeof(modeOrder) / sizeof(modeOrder[0])); modeIndex++)
+    {
+        if (strcpy_s(availableStatusCopy, sizeof(availableStatusCopy), availableStatus) != EOK)
+        {
+            return FALSE;
+        }
+
+        modePresent = FALSE;
+        entryContext = NULL;
+        entry = strtok_r(availableStatusCopy, "|", &entryContext);
+        while (entry != NULL)
+        {
+            name = strtok_r(entry, ",", &nameContext);
+            availableMode = INVALID_MODE;
+            if (name != NULL)
+            {
+                if ((strcmp(name, "DOCSIS") == 0) || (strcmp(name, "DSL") == 0) ||
+                    (strcmp(name, "ADSL") == 0))
+                {
+                    availableMode = DOCSIS;
+                }
+                else if (strcmp(name, "WANOE") == 0)
+                {
+                    availableMode = EWAN;
+                }
+                else if (strcmp(name, "EPON") == 0)
+                {
+                    availableMode = EPON;
+                }
+                else if (strcmp(name, "XGSPON") == 0)
+                {
+                    availableMode = XGSPON;
+                }
+            }
+
+            if (availableMode == modeOrder[modeIndex])
+            {
+                modePresent = TRUE;
+                break;
+            }
+            entry = strtok_r(NULL, "|", &entryContext);
+        }
+
+        if (!modePresent)
+        {
+            continue;
+        }
+
+        if (modeOrder[modeIndex] == activeMode)
+        {
+            if (index >= SUPPORTED_WAN_MODES)
+            {
+                WTC_LOG_ERROR("WTC index %d exceeds supported WAN modes %d",
+                              index, SUPPORTED_WAN_MODES);
+                return FALSE;
+            }
+            *wtcIndex = index;
+            WTC_LOG_INFO("WanManager resolved WAN mode %d, WTC index %d", *wanMode, *wtcIndex);
+            return TRUE;
+        }
+        index++;
+    }
+
+    WTC_LOG_ERROR("Active WAN mode %d is not available in %s", activeMode, availableStatus);
+    return FALSE;
+    }
 #endif
+
+syscfg_fallback:
+    if(syscfg_get(NULL,ETH_WAN_ENABLE_STRING,eth_wan_enabled,sizeof(eth_wan_enabled)) != 0)
+    {
+        WTC_LOG_ERROR("Syscfg_get failed to get wan mode");
+        return FALSE;
+    }
+    rc = strcmp_s(eth_wan_enabled, strlen(eth_wan_enabled), "true", &ind);
+    ERR_CHK(rc);
+    *wanMode = ((rc == EOK) && (!ind)) ? EWAN : DOCSIS;
+#if SUPPORTED_WAN_MODES == 1
+    *wtcIndex = 0;
+#else
+    *wtcIndex = (*wanMode == DOCSIS) ? 0 : 1;
+#endif
+    return TRUE;
 }
 
 /**********************************************************************

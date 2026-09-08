@@ -259,7 +259,7 @@ BOOL Stats_GetParamStringValue
     }
     else if (strcmp(ParamName, "DscpCountPerInterval") == 0)
     {
-        if(WTCinfo->WanMode != INVALID_MODE && client->InstanceNum == GetWtcIndex(WTCinfo->WanMode) + 1)
+        if(WTCinfo->WanMode != INVALID_MODE && client->InstanceNum == WTCinfo->WanModeWtcIndex + 1)
         {
             WTC_GetCount(pValue, pUlSize, TRUE, client);
             if(RBUS_ERROR_SUCCESS == WTC_EventPublish(WTC_COUNTPERINTERVAL, pValue, client->InstanceNum))
@@ -279,7 +279,7 @@ BOOL Stats_GetParamStringValue
     }
     else if (strcmp(ParamName, "DscpCountTotal") == 0)
     {
-        if(WTCinfo->WanMode != INVALID_MODE && client->InstanceNum == GetWtcIndex(WTCinfo->WanMode) + 1)
+        if(WTCinfo->WanMode != INVALID_MODE && client->InstanceNum == WTCinfo->WanModeWtcIndex + 1)
         {
             WTC_GetCount(pValue, pUlSize, FALSE, client);
             if(RBUS_ERROR_SUCCESS == WTC_EventPublish(WTC_COUNTTOTAL, pValue, client->InstanceNum))
@@ -390,7 +390,6 @@ BOOL Stats_SetParamStringValue
         return FALSE;
     }
 
-    //WTCinfo->WanMode = GetEthWANIndex();
     if (strcmp(ParamName, "DscpCountEnable") == 0)
     {
         if(!CheckIfValidDscp(pString))
@@ -412,8 +411,8 @@ BOOL Stats_SetParamStringValue
             WTC_LOG_ERROR("WTC_DCSPCOUNTENABLE WTC_EventPublish FAILURE");
         }
         client->IsDscpListSet = TRUE;
-        mode = GetEthWANIndex();
-        if(mode != INVALID_MODE && client->InstanceNum == GetWtcIndex(mode) + 1 && !IsBridgeMode())
+        mode = WTCinfo->WanMode;
+        if(mode != INVALID_MODE && client->InstanceNum == WTCinfo->WanModeWtcIndex + 1 && !IsBridgeMode())
         {
             WTC_LOG_INFO("WanMode = %d & !BridgeMode, Set Input change flag\
                                   Call WTC_ApplyStateChange", WTCinfo->WanMode);
@@ -483,8 +482,8 @@ BOOL Stats_SetParamUlongValue
             WTC_LOG_ERROR("WTC_COUNTINTERVAL WTC_EventPublish FAILURE");
         }
 
-        mode = GetEthWANIndex();
-        if(mode != INVALID_MODE && client->InstanceNum == GetWtcIndex(mode) + 1 && !IsBridgeMode())
+        mode = WTCinfo->WanMode;
+        if(mode != INVALID_MODE && client->InstanceNum == WTCinfo->WanModeWtcIndex + 1 && !IsBridgeMode())
         {
             WTC_LOG_INFO("Sleep Interval isset and not in bridge mode.\
                           Set Input change flag & Call WTC_ApplyStateChange");

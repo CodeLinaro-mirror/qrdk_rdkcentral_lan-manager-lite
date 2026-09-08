@@ -603,11 +603,14 @@ static void eventReceiveHandler(
                         if(WTCinfo)
                         {
                             pthread_mutex_lock(&WTCinfo->WanTrafficMutexVar);    
-                            if((strstr(newActiveInterface, "WANOE")))
-                                WTCinfo->WanMode = EWAN;
-                            else
-                                WTCinfo->WanMode = DSL;
-                            WTCinfo->WTCConfigFlag[GetWtcIndex(WTCinfo->WanMode)] |= WTC_WANMODE_CHANGE;
+                            if (!GetWanModeAndWtcIndex(&WTCinfo->WanMode,
+                                                       &WTCinfo->WanModeWtcIndex))
+                            {
+                                CcspTraceError(("Unable to resolve WAN mode and WTC index\n"));
+                                pthread_mutex_unlock(&WTCinfo->WanTrafficMutexVar);
+                                return;
+                            }
+                            WTCinfo->WTCConfigFlag[WTCinfo->WanModeWtcIndex] |= WTC_WANMODE_CHANGE;
                             pthread_mutex_unlock(&WTCinfo->WanTrafficMutexVar);
                             WTC_ApplyStateChange();
                             CcspTraceInfo(("Setting WAN mode change!!!\n"));

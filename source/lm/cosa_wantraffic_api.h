@@ -109,6 +109,7 @@
 #define TR181_COUNTPERINTERVAL      "Device.X_RDK_WAN.Interface.1.Stats.DscpCountPerInterval"
 #define TR181_COUNTTOTAL            "Device.X_RDK_WAN.Interface.1.Stats.DscpCountTotal"
 #define TR181_ACTIVE_INTERFACE      "Device.X_RDK_WanManager.InterfaceActiveStatus"
+#define TR181_AVAILABLE_INTERFACE   "Device.X_RDK_WanManager.InterfaceAvailableStatus"
 #define DSL                         DOCSIS
 
 
@@ -193,6 +194,7 @@ typedef struct _stWTCInfo_t {
     UCHAR                 WTCConfigFlag[SUPPORTED_WAN_MODES];
     BOOL                  LanMode;
     WAN_INTERFACE         WanMode;
+    UINT                  WanModeWtcIndex;
     UINT                  SubscribeRefCount;
     pthread_t             WanTrafficThreadId;
     pthread_mutex_t       WanTrafficMutexVar;
