@@ -125,6 +125,9 @@
 
 #define EVENT_QUEUE_NAME  "/Event_queue"
 #define DNSMASQ_NOTIFY_QUEUE_NAME  "/dnsmasq_eventqueue"
+#define EVENT_QUEUE_IDLE_MAX_WAIT_SEC  60
+
+static int g_EventHandlerBusy = 0;
 
 #define MAX_SIZE    2048
 #define MAX_SIZE_DNSMASQ_Q    512
@@ -2372,6 +2375,8 @@ static void *Event_HandlerThread(void *threadid)
         EventQData EventMsg;
         Eth_data EthHost;
 
+        __atomic_store_n(&g_EventHandlerBusy, 0, __ATOMIC_SEQ_CST);
+
         /* receive the message */
         bytes_read = mq_receive(mq, buffer, MAX_SIZE, NULL);
 
@@ -2380,6 +2385,8 @@ static void *Event_HandlerThread(void *threadid)
             perror("bytes_read < 0");
             return NULL;
         }
+
+        __atomic_store_n(&g_EventHandlerBusy, 1, __ATOMIC_SEQ_CST);
 
         buffer[bytes_read] = '\0';
 
@@ -3016,6 +3023,35 @@ static void lm_publish_active_wifi_clients_state(bool active)
 
 #endif /* LPM_MANAGER_SUPPORT */
 
+/* Avoid counting while queued MoCA/WiFi/Eth events are still being added to lmHosts. */
+static void Hosts_WaitForEventQueueIdle(int maxWaitSec)
+{
+    struct mq_attr attr;
+    mqd_t mq = mq_open(EVENT_QUEUE_NAME, O_RDONLY | O_NONBLOCK);
+
+    if (mq == (mqd_t)-1)
+    {
+        return;
+    }
+
+    while (maxWaitSec-- > 0)
+    {
+        if ((mq_getattr(mq, &attr) == 0) && (attr.mq_curmsgs == 0) &&
+            !__atomic_load_n(&g_EventHandlerBusy, __ATOMIC_SEQ_CST))
+        {
+            break;
+        }
+        sleep(1);
+    }
+
+    if (maxWaitSec < 0)
+    {
+        CcspTraceWarning(("%s: host event queue still busy, logging current snapshot\n", __FUNCTION__));
+    }
+
+    mq_close(mq);
+}
+
 static void *Hosts_LoggingThread(void *args)
 {
     UNREFERENCED_PARAMETER(args);
@@ -3037,6 +3073,7 @@ static void *Hosts_LoggingThread(void *args)
 
 	while(1)
 	{
+        Hosts_WaitForEventQueueIdle(EVENT_QUEUE_IDLE_MAX_WAIT_SEC);
         CcspTraceDebug(("%s:%d, Acquiring LmHostObjectMutex\n",__FUNCTION__,__LINE__));
 		pthread_mutex_lock(&LmHostObjectMutex);
         CcspTraceDebug(("%s:%d, Acquired LmHostObjectMutex\n",__FUNCTION__,__LINE__));
